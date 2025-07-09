@@ -48,7 +48,11 @@ export async function convertFile(buffer: Buffer, sourceFormat: string, targetFo
       image = await pdfDoc.embedPng(processedBuffer);
     }
     page.drawImage(image, { x: 0, y: 0, width: imgWidth, height: imgHeight });
-    convertedBuffer = Buffer.from(await pdfDoc.save());
+    const pdfBytes = await pdfDoc.save();
+    if (!pdfBytes || pdfBytes.length < 100) {
+      throw new Error("Generated PDF is empty or invalid.");
+    }
+    convertedBuffer = Buffer.from(pdfBytes);
     resourceType = "raw";
   }
   // IMAGE → DOCX
