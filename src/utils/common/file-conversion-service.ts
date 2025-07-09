@@ -4,6 +4,9 @@ import libre from "libreoffice-convert";
 import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 const imageFormats = [
   "jpg",
@@ -27,26 +30,14 @@ export async function convertFile(buffer: Buffer, sourceFormat: string, targetFo
   }
   // IMAGE → PDF
   else if (imageFormats.includes(sourceFormat) && targetFormat === "pdf") {
-    let processedBuffer: Buffer;
-    let embedType: "jpg" | "png";
-    if (["jpg", "jpeg"].includes(sourceFormat)) {
-      processedBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
-      embedType = "jpg";
-    } else {
-      processedBuffer = await sharp(buffer).png({ quality: 90 }).toBuffer();
-      embedType = "png";
-    }
+    // Always embed as PNG for maximum compatibility
+    const processedBuffer = await sharp(buffer).png({ quality: 90 }).toBuffer();
     const metadata = await sharp(processedBuffer).metadata();
     const imgWidth = metadata.width || 600;
     const imgHeight = metadata.height || 800;
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([imgWidth, imgHeight]);
-    let image;
-    if (embedType === "jpg") {
-      image = await pdfDoc.embedJpg(processedBuffer);
-    } else {
-      image = await pdfDoc.embedPng(processedBuffer);
-    }
+    const image = await pdfDoc.embedPng(processedBuffer);
     page.drawImage(image, { x: 0, y: 0, width: imgWidth, height: imgHeight });
     const pdfBytes = await pdfDoc.save();
     if (!pdfBytes || pdfBytes.length < 100) {
@@ -99,13 +90,36 @@ export async function convertFile(buffer: Buffer, sourceFormat: string, targetFo
   }
   // DOCX → PDF
   else if (sourceFormat === "docx" && targetFormat === "pdf") {
-    convertedBuffer = await new Promise<Buffer>((resolve, reject) => {
-      libre.convert(buffer, ".pdf", undefined, (err: any, done: any) => {
-        if (err) reject(new Error(`LibreOffice conversion failed: ${err.message || err}`));
-        else resolve(done as Buffer);
+    // Use a unique temp directory for each conversion
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "convertify-"));
+    const inputPath = path.join(tmpDir, `input.docx`);
+    const outputPath = path.join(tmpDir, `output.pdf`);
+    try {
+      fs.writeFileSync(inputPath, buffer);
+      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+        libre.convert(fs.readFileSync(inputPath), ".pdf", undefined, (err: any, done: any) => {
+          if (err) reject(new Error(`LibreOffice conversion failed: ${err.message || err}`));
+          else resolve(done as Buffer);
+        });
       });
-    });
-    resourceType = "raw";
+      if (!pdfBuffer || pdfBuffer.length < 100) {
+        throw new Error("Generated PDF is empty or invalid.");
+      }
+      convertedBuffer = Buffer.from(pdfBuffer);
+      resourceType = "raw";
+    } finally {
+      // Clean up temp files and directory
+      try {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        fs.rmdirSync(tmpDir, { recursive: true });
+      } catch (cleanupErr) {
+        // Ignore ENOTEMPTY errors, log others
+        if (cleanupErr.code !== "ENOTEMPTY") {
+          console.error("Temp cleanup error:", cleanupErr);
+        }
+      }
+    }
   }
   // DOCX → TXT
   else if (sourceFormat === "docx" && targetFormat === "txt") {
