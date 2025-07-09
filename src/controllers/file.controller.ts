@@ -1,15 +1,8 @@
 import { Request, Response } from "express";
-import { cloudinaryUploader } from "../utils/common/cloudinary-service";
-import { ConvertedFileModel } from "../models/file.model";
-import sharp from "sharp";
 import streamifier from "streamifier";
-import { Document, Packer, Paragraph, ImageRun } from "docx";
-import libre from "libreoffice-convert";
-import mammoth from "mammoth";
-import pdfParse from "pdf-parse";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { ConvertedFileModel } from "../models/file.model";
+import { cloudinaryUploader } from "../utils/common/cloudinary-service";
 import { convertFile } from "../utils/common/file-conversion-service";
-// import jsPDF from "jspdf";
 
 function getExtension(filename: string) {
   return filename.split(".").pop()?.toLowerCase() || "";

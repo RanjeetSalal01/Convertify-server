@@ -21,4 +21,8 @@ class ConvertedFile {
   userId: string;
 }
 
-export const ConvertedFileModel = getModelForClass(ConvertedFile);
+export const ConvertedFileModel = getModelForClass(ConvertedFile, {
+  schemaOptions: {
+    timestamps: true,
+  },
+});
